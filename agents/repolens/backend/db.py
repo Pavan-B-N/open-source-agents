@@ -145,15 +145,15 @@ def get_audit_by_url(url: str) -> Optional[dict[str, Any]]:
 
 
 def list_audits(limit: int = 20) -> list[dict[str, Any]]:
-    """Return recent audits ordered by creation time, newest first."""
+    """Return recent audits ordered by update time, newest first."""
     with get_db() as conn:
         return conn.execute(
             """
             SELECT id, repository_url, repository_name, commit_sha,
-                   scan_status, is_demo, scanner_status,
+                   scan_status, is_demo, scanner_status, report_json,
                    created_at, updated_at
             FROM repository_audits
-            ORDER BY created_at DESC
+            ORDER BY updated_at DESC
             LIMIT %s
             """,
             (limit,),

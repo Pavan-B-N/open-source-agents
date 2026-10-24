@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import Markdown from 'react-markdown'
 import {
   getAudits, getAudit, getHealth, startScan, getReportDownloadUrl,
   type AuditSummary, type AuditDetail, type HealthResponse, type Finding
@@ -67,6 +68,103 @@ function FindingCard({ finding }: { finding: Finding }) {
 
 function MetaRow({ label, children }: { label: string; children: ReactNode }) {
   return <div className="finding-meta-row"><span className="finding-meta-label">{label}</span><div className="finding-meta-value">{children}</div></div>
+}
+
+function replaceUnverified(children: ReactNode): ReactNode {
+  if (typeof children === 'string') {
+    const regex = /\[UNVERIFIED SUGGESTION(?:\s*—\s*[^\]]+)?\]/gi
+    if (!regex.test(children)) return children
+    const parts = children.split(regex)
+    const elements: ReactNode[] = []
+    parts.forEach((part, i) => {
+      elements.push(part)
+      if (i < parts.length - 1) {
+        elements.push(
+          <span key={i} className="unverified-pill" title="AI observation not confirmed by scanner">
+            <span className="unverified-dot" /> Unverified Suggestion
+          </span>
+        )
+      }
+    })
+    return elements
+  }
+  if (Array.isArray(children)) {
+    return children.map((c, i) => <span key={i}>{replaceUnverified(c)}</span>)
+  }
+  return children
+}
+
+const markdownComponents = {
+  h1: ({ children }: any) => <h3 className="ai-md-h1">{children}</h3>,
+  h2: ({ children }: any) => <h4 className="ai-md-h2">{children}</h4>,
+  h3: ({ children }: any) => <h4 className="ai-md-h3">{children}</h4>,
+  h4: ({ children }: any) => <h5 className="ai-md-h4">{children}</h5>,
+  p: ({ children }: any) => <p className="ai-md-p">{replaceUnverified(children)}</p>,
+  ul: ({ children }: any) => <ul className="ai-md-ul">{children}</ul>,
+  ol: ({ children }: any) => <ol className="ai-md-ol">{children}</ol>,
+  li: ({ children }: any) => <li className="ai-md-li">{replaceUnverified(children)}</li>,
+  strong: ({ children }: any) => <strong className="ai-md-strong">{children}</strong>,
+  code: ({ children }: any) => <code className="ai-md-code">{children}</code>,
+}
+
+function ActionItem({ action, index }: { action: string; index: number }) {
+  const unverifiedRegex = /\[UNVERIFIED SUGGESTION(?:\s*—\s*[^\]]+)?\]/gi
+  const hasUnverified = unverifiedRegex.test(action)
+  const cleanAction = action.replace(unverifiedRegex, '').trim()
+
+  return (
+    <li className="ai-action-card">
+      <div className="ai-action-badge">{String(index + 1).padStart(2, '0')}</div>
+      <div className="ai-action-content">
+        <Markdown components={markdownComponents}>{cleanAction}</Markdown>
+        {hasUnverified && (
+          <span className="unverified-pill" title="AI observation not confirmed by scanner">
+            <span className="unverified-dot" /> Unverified Suggestion
+          </span>
+        )}
+      </div>
+    </li>
+  )
+}
+
+function AiSummaryBlock({ summary, actions }: { summary: string; actions: string[] }) {
+  let analysisText = summary
+  if (actions && actions.length > 0) {
+    const parts = summary.split(/#{2,4}\s*(?:3\.\s*)?Prioritized Remediation Steps/i)
+    if (parts.length > 1) {
+      analysisText = parts[0].trim()
+    }
+  }
+
+  return (
+    <div className="ai-block">
+      <div className="ai-block-header">
+        <div className="ai-sparkle">✦</div>
+        <div>
+          <strong className="ai-header-title">AI-Assisted Security Synthesis</strong>
+          <span className="ai-header-sub">Gemini 3.8 Flash · Automated Triage & Remediation</span>
+        </div>
+      </div>
+
+      <div className="ai-markdown-body">
+        <Markdown components={markdownComponents}>{analysisText}</Markdown>
+      </div>
+
+      {actions && actions.length > 0 && (
+        <div className="ai-actions-section">
+          <div className="ai-actions-header">
+            <span className="eyebrow small">REMEDIATION ROADMAP</span>
+            <span className="ai-actions-sub">5 prioritized steps</span>
+          </div>
+          <ol className="ai-actions-list">
+            {actions.map((action, index) => (
+              <ActionItem key={index} action={action} index={index} />
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function StatCard({ label, value, tone, footnote }: { label: string; value: string | number; tone?: string; footnote: string }) {
@@ -261,11 +359,7 @@ function App() {
                 {Object.keys(report.scanner_status).length > 0 && <ScannerStatusRow status={report.scanner_status} />}
 
                 {report.ai_available && report.ai_summary && (
-                  <div className="ai-block">
-                    <div className="ai-block-title"><span className="ai-sparkle">✦</span><div><strong>AI-assisted triage</strong><span>Gemini summary · Suggestions are unverified</span></div></div>
-                    <p>{report.ai_summary}</p>
-                    {report.ai_prioritized_actions.length > 0 && <ol className="ai-actions-list">{report.ai_prioritized_actions.map((action, index) => <li key={index}><span>{String(index + 1).padStart(2, '0')}</span>{action}</li>)}</ol>}
-                  </div>
+                  <AiSummaryBlock summary={report.ai_summary} actions={report.ai_prioritized_actions} />
                 )}
 
                 <div className="findings-heading-row">

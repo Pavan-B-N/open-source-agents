@@ -54,6 +54,17 @@ def make_tools(report_snapshot: dict[str, Any]):
             for name, s in report_snapshot.get("scanner_status", {}).items()
         }
 
+        top_findings = [
+            {
+                "finding_id": f.get("finding_id"),
+                "title": f.get("title"),
+                "severity": f.get("severity"),
+                "scanner": f.get("scanner"),
+                "file_path": f.get("file_path"),
+            }
+            for f in findings[:25]
+        ]
+
         return {
             "repository_name": report_snapshot.get("repository_name"),
             "commit_sha": report_snapshot.get("commit_sha"),
@@ -62,6 +73,7 @@ def make_tools(report_snapshot: dict[str, Any]):
             "severity_breakdown": severity_counts,
             "scanner_status": scanner_status,
             "is_demo": report_snapshot.get("is_demo", False),
+            "top_findings": top_findings,
         }
 
     def get_finding_details(finding_id: str) -> dict[str, Any]:

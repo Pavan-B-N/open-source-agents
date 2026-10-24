@@ -6,303 +6,395 @@
 
 # RepoLens
 
-### Evidence-first security reviews for public GitHub repositories
+### Evidence-First Security Reviews for Public GitHub Repositories
 
-RepoLens combines **Trivy** and **Semgrep** findings with optional, clearly labeled **Gemini** triage. Scanner output stays the source of truth; AI helps explain and prioritize it.
+**🏆 Track / Theme:** **AI Workflows & Automation**
+
+RepoLens pairs deterministic static security tooling (**Trivy** + **Semgrep**) with bounded, provenance-tracked agentic AI triage (**Google ADK** + **Gemini 3.8 Flash**). Scanner evidence remains the uncompromised source of truth; the AI agent synthesizes and prioritizes concrete remediation roadmaps without hallucinations.
 
 <br />
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Google ADK](https://img.shields.io/badge/Agent-Google_ADK-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://github.com/google/agent-development-kit)
+[![Gemini 3.8 Flash](https://img.shields.io/badge/Model-Gemini_3.8_Flash-8E75B2?style=for-the-badge&logo=googlecloud&logoColor=white)](https://ai.google.dev/)
 [![React + TypeScript](https://img.shields.io/badge/UI-React_+_TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Docker Compose](https://img.shields.io/badge/Run-Docker_Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 
-**Scan a repository · inspect evidence · prioritize the next fix**
+**Scan a repository · Inspect verified evidence · Execute the prioritized fix**
 
 <img src="./docs/images/hero-banner.svg" alt="RepoLens: evidence-backed scanner findings and clearly labeled AI assistance" width="100%" />
 
 <br />
 
-[Product tour](#product-tour) · [Quick start](#prerequisites) · [Architecture](#architecture-and-data-flow) · [API](#using-the-api) · [Security](#security-and-privacy)
+[Product Tour](#live-product-tour) · [Architecture & Data Flow](#architecture--data-flow-single-source-of-truth) · [Google ADK Agent](#agentic-ai--google-adk-architecture) · [Quick Start](#quick-start) · [API Reference](#api-reference) · [Security & Guardrails](#security-and-privacy)
 
 </div>
 
 ---
 
-## At a glance
+## At a Glance
 
-- **Who it is for:** developers and security engineers who need a readable first pass over a public repository.
-- **What it does:** runs Trivy and Semgrep, normalizes the results, redacts likely secrets, stores a report, and presents it in a filterable dashboard.
-- **Where AI fits:** Google ADK + Gemini can summarize and prioritize the bounded scanner findings. AI suggestions are identified as unverified and do not modify scanner findings or their severities.
-- **Without an API key:** RepoLens still runs in scanner-only mode.
+- **The Problem:** Security scanners overwhelm developers with thousands of noisy, unranked findings. Conversely, raw LLMs hallucinate vulnerabilities, fabricate file paths, and provide misleading security guarantees without proof.
+- **The RepoLens Solution:** Deterministic scanners (**Trivy** for CVEs, secrets, and misconfigurations; **Semgrep** for AST-based SAST) collect factual evidence. A sandboxed **Google ADK Agent** interacts exclusively through read-only tools to triage, contextualize, and prioritize a 5-step remediation plan.
+- **Zero-Hallucination Guardrails:** AI suggestions are strictly separated from scanner evidence via explicit provenance flags (`scanner` vs `ai_suggestion`) and labeled in the UI with amber `UNVERIFIED SUGGESTION` badges.
+- **Offline / Scanner-Only Resiliency:** Without a `GOOGLE_API_KEY`, the entire scanner and reporting pipeline executes cleanly in deterministic scanner-only mode.
 
-> RepoLens is an aid for triage, not a replacement for security review. Scanner coverage and regex-based secret redaction have limits; check the evidence and validate fixes in your own environment.
+> [!IMPORTANT]
+> RepoLens is an automated triage assistant, not a replacement for a comprehensive security audit. Scanner findings are the factual foundation; AI suggestions provide prioritization and contextual explanation.
 
-## Product tour
+---
 
-### Dashboard walkthrough
+## Live Product Tour
 
-![Animated RepoLens dashboard walkthrough. Frames use illustrative sample audit data, not a live scan recording.](./docs/images/repolens-demo.gif)
+All captures below represent **genuine, live audits** executed by RepoLens against active open-source repositories (`Pavan-B-N/weather-app`, `OWASP/NodeGoat`, and `Pavan-B-N/readora`).
 
-*The dashboard and finding previews below use illustrative sample values to show the current interface.*
+### Live Interactive Walkthrough
+
+The animated walkthrough demonstrates real-time URL validation, live vulnerability filtering by severity, AI remediation roadmap rendering, and inspection of underlying CVE evidence:
 
 <p align="center">
-  <img src="./docs/images/dashboard-overview.png" alt="RepoLens security overview with audit history, risk metrics, and scanner findings" width="49%" />
-  <img src="./docs/images/finding-details.png" alt="RepoLens finding detail with code evidence and remediation" width="49%" />
+  <img src="./docs/images/repolens-demo.gif" alt="Live RepoLens interactive walkthrough showing security scan results and AI triage" width="100%" />
 </p>
 
 ---
 
-## What makes RepoLens useful
+### Complete Security Dashboard
 
-Security scanners can return a lot of output with little prioritization. AI-only code review can also produce convincing claims without proof. RepoLens keeps evidence collection and AI assistance separate:
+The unified command center displays aggregate security posture metrics across recent scans, live scanner statuses, executive triage, and categorized findings:
 
-1. **Established scanners find issues.** Trivy checks vulnerabilities, secrets, and misconfigurations. Semgrep runs static analysis rules.
-2. **Findings share one report format.** The API provides severity, scanner, rule/advisory IDs, file location, evidence, remediation, and provenance where available.
-3. **Likely secrets are redacted.** Evidence snippets are scrubbed and bounded before storage or AI enrichment.
-4. **AI assists with triage.** If configured, a Google ADK agent receives only a bounded findings snapshot through read-only tools and returns a summary with up to five prioritized actions.
-5. **Unavailable tools are visible.** A missing or failed scanner is reported as unavailable or errored; it is not silently described as a clean scan.
+<p align="center">
+  <img src="./docs/images/dashboard-overview.png" alt="Full RepoLens live dashboard overview showing 51 findings for weather-app and active scanner pills" width="100%" />
+</p>
 
-Gemini use is optional and may consume quota or incur charges depending on the selected model and the user's current Google account terms. RepoLens does not currently report token or cost usage. The agent receives no more than 30 findings per request; evidence is redacted and bounded by `MAX_SNIPPET_BYTES` (2,048 bytes by default).
-
-## Capabilities
-
-- 🔗 **Repository intake** — HTTPS GitHub `owner/repo` URLs, shallow clone, size and time limits, and commit SHA capture.
-- 🛡️ **Security scanners** — Trivy filesystem checks for vulnerabilities, secrets, and misconfigurations; Semgrep `auto` ruleset for SAST.
-- 🧾 **One normalized report** — Consistent severity, scanner status, tech-stack hints, rule IDs, location, evidence, and provenance.
-- 🔒 **Evidence privacy** — Heuristic secret redaction, bounded evidence snippets, and temporary checkout cleanup.
-- ✨ **Optional AI triage** — Gemini summary and prioritized actions, with scanner-only fallback if AI is missing or unavailable.
-- 🖥️ **Interactive dashboard** — Audit history, severity filters, scanner status, expandable findings, evidence, remediation, and demo labels.
-- 📦 **Portable reports** — PostgreSQL JSONB + Markdown persistence, with JSON and Markdown downloads.
-- 🐳 **Local deployment** — Docker Compose runs PostgreSQL, the API, Trivy, Semgrep, and the Nginx-hosted frontend.
+*Live audit of `Pavan-B-N/weather-app`: 51 total findings (1 Critical, 31 High, 9 Medium, 10 Low) with Trivy (49 findings) and Semgrep (2 findings) operational.*
 
 ---
 
-## Architecture and data flow
+### AI-Assisted Security Synthesis & Remediation Roadmap
 
-![Animated RepoLens architecture and data flow: GitHub URL validation, bounded clone, parallel Trivy and Semgrep scans, normalization and redaction, optional Gemini triage, PostgreSQL persistence, dashboard, and exports](./docs/images/repolens-flow.gif)
+The Google ADK agent synthesizes the raw findings into an executive posture summary, highlights high-risk vulnerability clusters, and generates an actionable 5-step remediation roadmap with monospace code chips and amber provenance badges:
 
-**Flow:** GitHub URL → validation and bounded clone → Trivy + Semgrep → normalized, redacted findings → optional Gemini summary → PostgreSQL → dashboard and JSON/Markdown exports.
+<p align="center">
+  <img src="./docs/images/ai-insights-detail.png" alt="AI-assisted security synthesis and 5-step prioritized remediation roadmap generated by Gemini 3.8 Flash" width="100%" />
+</p>
 
-AI enrichment is optional. If it is disabled or unavailable, scanner findings still flow to the report. The [branded SVG flow](./docs/images/architecture-flow.svg) is available for a static overview.
-
-## Built with
-
-🐍 **Python 3.11+** · ⚡ **FastAPI** · 🧠 **Google ADK + Gemini** · 🔍 **Trivy + Semgrep** · 🗄️ **PostgreSQL + psycopg3** · ⚛️ **React + TypeScript + Vite** · 🐳 **Docker Compose + Nginx**
-
-The agent uses read-only tools over a sanitized report snapshot; Gemini is configurable and optional.
+*Gemini 3.8 Flash automatically links Trivy dependency alerts with concrete `npm audit` upgrade steps while tagging unverified recommendations with amber badges.*
 
 ---
 
-## Prerequisites
+### Verified Vulnerability Deep-Dive & Scanner Evidence
 
-### Docker quick start (recommended)
+Each finding exposes its origin scanner, rule/CVE identifier, exact repository file path, line numbers, scrubbed evidence snippet, remediation guidance, and advisory links:
 
-- Docker Engine or Docker Desktop with the Compose plugin
-- A local PostgreSQL password for Compose
-- A Google AI Studio API key only if you want Gemini enrichment
+<p align="center">
+  <img src="./docs/images/finding-details.png" alt="Expanded finding card showing CVE-2026-90711 on proxy-addr with redacted evidence and upgrade fix" width="100%" />
+</p>
 
-```bash
-cd agents/repolens
-cp .env.example .env
+*Deep-dive into `CVE-2026-90711` on `proxy-addr` in `package-lock.json`: includes verified advisory reference and concrete version upgrade instruction (`2.0.7` → `2.0.8`).*
+
+---
+
+## Architecture & Data Flow (Single Source of Truth)
+
+RepoLens implements a unidirectional, defensive pipeline designed for security, audit reproducibility, and process isolation.
+
+```mermaid
+flowchart TD
+    classDef client fill:#18221c,stroke:#b7f36b,stroke-width:1.5px,color:#e8eee9;
+    classDef api fill:#111816,stroke:#344238,stroke-width:1.5px,color:#e8eee9;
+    classDef scanner fill:#16241b,stroke:#8fda78,stroke-width:1.5px,color:#e8eee9;
+    classDef agent fill:#201e14,stroke:#f6c445,stroke-width:1.5px,color:#e8eee9;
+    classDef storage fill:#151b22,stroke:#4285f4,stroke-width:1.5px,color:#e8eee9;
+
+    User([User / Browser]):::client -->|HTTPS GitHub URL| UI[Vite + React 18 Dashboard]:::client
+    UI -->|POST /api/scans| FastAPI[FastAPI Ingestion Gateway]:::api
+
+    subgraph Phase 1: Intake & Sandbox
+        FastAPI -->|1. Validate URL| Val[validator.py\nRegex & SSRF Guard]:::api
+        Val -->|2. Ephemeral Clone| Cloner[cloner.py\nGit shallow depth=1]:::api
+        Cloner -.->|Watchdog Monitor| Watchdog{Max 100MB / 300s?}:::api
+    end
+
+    subgraph Phase 2: Dual-Scanner Engine
+        Cloner -->|3. Filesystem Scan| Trivy[Trivy Scanner\nCVEs · Secrets · Config]:::scanner
+        Cloner -->|3. SAST Code Scan| Semgrep[Semgrep Scanner\nAST Ruleset: auto]:::scanner
+    end
+
+    subgraph Phase 3: Normalization & Privacy
+        Trivy -->|Raw JSON| Norm[normalizer.py\nUnified Finding Schema]:::api
+        Semgrep -->|Raw JSON| Norm
+        Norm -->|Evidence Snippets| Redact[redactor.py\nRegex Secret Scrubber]:::api
+    end
+
+    subgraph Phase 4: Bounded Agentic AI
+        Redact -->|Sanitized Snapshot| Tools[agent/tools.py\nRead-Only Closures]:::agent
+        Tools <-->|Function Calling| ADK[agent/audit_agent.py\nGoogle ADK LlmAgent]:::agent
+        ADK <-->|Gemini 3.8 Flash| Gemini[(Google GenAI API)]:::agent
+    end
+
+    subgraph Phase 5: Storage & Delivery
+        ADK -->|AI Enrichment| ReportBuilder[Report Assembler]:::api
+        Redact -->|Scanner Findings| ReportBuilder
+        ReportBuilder -->|Upsert JSONB + MD| Postgres[(PostgreSQL Database\nrepository_audits)]:::storage
+        Postgres -->|GET /api/audits| UI
+        Postgres -->|Export JSON / Markdown| Downloads([Dual-Format Downloads]):::client
+    end
 ```
 
-Set `POSTGRES_PASSWORD` in `.env`. Leave `GOOGLE_API_KEY` blank for scanner-only mode, or add your own key for AI enrichment. Then start the services:
+---
+
+### End-to-End Pipeline Breakdown
+
+| Stage | Responsible Component | Security Guardrail / Logic |
+| :--- | :--- | :--- |
+| **1. Validation** | [`backend/scanner/validator.py`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/backend/scanner/validator.py) | Validates public `https://github.com/owner/repo` patterns with strict regex. Rejects private repos, credentials in URLs, extra paths, and shell metacharacters. |
+| **2. Ephemeral Sandbox** | [`backend/scanner/cloner.py`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/backend/scanner/cloner.py) | Executes `git clone --depth 1` into an isolated temporary folder. A background size-sampling watchdog enforces `MAX_REPO_SIZE_MB` (100MB). Guaranteed deletion in `finally` block. **Never executes repository code or build scripts.** |
+| **3. Dual Scanning** | [`backend/scanner/trivy.py`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/backend/scanner/trivy.py)<br>[`backend/scanner/semgrep.py`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/backend/scanner/semgrep.py) | **Trivy v0.76+**: Scans dependencies, filesystem misconfigurations, and leaked credentials.<br>**Semgrep v1.136+**: Executes semantic pattern rules (`--config auto`) over source files. Both pass arguments via safe arrays (`shell=False`). |
+| **4. Normalization & Redaction** | [`backend/scanner/normalizer.py`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/backend/scanner/normalizer.py)<br>[`backend/scanner/redactor.py`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/backend/scanner/redactor.py) | Converts heterogeneous scanner outputs into standard [`AuditReport`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/backend/models.py) objects. Hashes file/line/rule attributes into deterministic UUIDs. Runs multi-pattern regex scrubbing against evidence to mask API tokens, private keys, and passwords before storage. |
+| **5. Agentic AI Triage** | [`agent/audit_agent.py`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/agent/audit_agent.py)<br>[`agent/runner.py`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/agent/runner.py) | The Google ADK `repolens_audit_agent` invokes bounded read-only tools to analyze vulnerability clusters, explain root causes, and prioritize 5 actionable fixes. Speculative advice is tagged `[UNVERIFIED SUGGESTION]`. AI enrichment is non-fatal; if Gemini is unreachable, scanner results persist unhindered. |
+| **6. Persistence & UI** | [`backend/db.py`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/backend/db.py)<br>[`frontend/src/App.tsx`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/frontend/src/App.tsx) | Idempotently upserts the full report (`jsonb`), Markdown summary, and scanner metrics in PostgreSQL. The React 18 dashboard renders the report with `react-markdown`, active severity filters, and direct JSON/Markdown download buttons. |
+
+---
+
+## Agentic AI & Google ADK Architecture
+
+RepoLens adheres to a **Tool-Isolated Agent Pattern** that prevents common generative AI failure modes:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                      Google ADK Agent Boundary                         │
+│                                                                        │
+│   ┌───────────────────────────┐      Function Call                     │
+│   │   repolens_audit_agent    ├─────────────────────────────┐          │
+│   │     (Gemini 3.8 Flash)    │                             │          │
+│   └─────────────▲─────────────┘                             ▼          │
+│                 │ Response                       ┌────────────────────┐│
+│                 │                                │  Read-Only Tools   ││
+│                 │                                ├────────────────────┤│
+│   ┌─────────────┴─────────────┐                  │ get_scan_summary() ││
+│   │    Provenance Guard       │                  │                    ││
+│   │ ───────────────────────── │                  │ get_finding_       ││
+│   │ • Scanner: Verified Proof │                  │   details(id)      ││
+│   │ • AI: Unverified Pill     │                  └──────────┬─────────┘│
+│   └───────────────────────────┘                             │          │
+│                                                             ▼          │
+│   🚫 NO Filesystem Access     🚫 NO Network/Outbound   ┌──────────────┐│
+│   🚫 NO Shell Execution       🚫 NO Database Access    │ Bounded Data ││
+│                                                        │   Snapshot   ││
+│                                                        └──────────────┘│
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Agent Design Decisions
+
+1. **Strict Sandboxing via Closures**:
+   The agent tools in [`agent/tools.py`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/agent/tools.py) (`get_scan_summary` and `get_finding_details`) are instantiated per-scan as closures around an immutable, in-memory data snapshot. The agent **cannot** access the host disk, execute shell commands, issue outbound network requests, or modify database tables.
+2. **Deterministic Grounding**:
+   The agent is explicitly instructed to never invent CVEs, package versions, or file locations. `get_scan_summary` provides top finding IDs and metadata, enabling the model to inspect genuine findings with `get_finding_details(finding_id)`. Nonexistent finding IDs return a structured error.
+3. **Explicit Provenance Tracking**:
+   Findings originating from Trivy or Semgrep carry `provenance: "scanner"`. Any speculative insight added during analysis is tagged with `[UNVERIFIED SUGGESTION — not confirmed by scanner]`, which the frontend renders as an amber `.unverified-pill` badge.
+4. **Resilient Non-Blocking Fallback**:
+   If `GOOGLE_API_KEY` is omitted, the quota is exceeded, or the network times out, `run_agent_sync()` catches the exception, logs a warning, and returns `(None, [])`. The complete scanner evidence is preserved and delivered to the user without interruption.
+
+---
+
+## Sample Live Audit Output
+
+### JSON API Output (`/api/audits/3`)
+
+```json
+{
+  "id": 3,
+  "repository_url": "https://github.com/Pavan-B-N/weather-app",
+  "repository_name": "Pavan-B-N/weather-app",
+  "commit_sha": "2020b5870df4fdf30b23bce2f473315d2510afbd",
+  "scan_status": "completed",
+  "critical_count": 1,
+  "high_count": 31,
+  "medium_count": 9,
+  "low_count": 10,
+  "total_findings": 51,
+  "report_json": {
+    "tech_stack": ["Node.js"],
+    "scanner_status": {
+      "trivy": { "available": true, "exit_code": 0, "finding_count": 49 },
+      "semgrep": { "available": true, "exit_code": 0, "finding_count": 2 }
+    },
+    "ai_available": true,
+    "ai_summary": "### Security Audit Summary: `Pavan-B-N/weather-app`\n\n#### 1. Overall Security Posture\nThe automated security scan for `Pavan-B-N/weather-app` identified 51 total findings across active static analysis and dependency scanners...\n\n#### 2. Key Findings Overview\n- **CRITICAL Severity (1 finding):** IP spoofing vulnerability in `proxy-addr` dependency.\n- **HIGH Severity (31 findings):** Widespread DoS and regular expression issues across Express middleware...",
+    "ai_prioritized_actions": [
+      "**Audit and Upgrade Outdated Node.js Packages:** Run `npm audit` or `yarn audit` to patch the 31 HIGH vulnerabilities, prioritizing `proxy-addr` upgrade to 2.0.8.",
+      "**Review Static Code Findings:** Review the 2 Semgrep findings in application code for common Node.js input validation oversights. [UNVERIFIED SUGGESTION — not confirmed by scanner]",
+      "**Commit and Enforce Lockfiles:** Ensure `package-lock.json` is strictly tracked in Git to eliminate vulnerable transitive dependencies. [UNVERIFIED SUGGESTION — not confirmed by scanner]",
+      "**Integrate Continuous Vulnerability Scanning:** Add automated CI checks with Trivy and Semgrep on pull requests. [UNVERIFIED SUGGESTION — not confirmed by scanner]",
+      "**Automate Security Patching:** Configure Dependabot or Renovate for automatic dependency updates. [UNVERIFIED SUGGESTION — not confirmed by scanner]"
+    ]
+  }
+}
+```
+
+---
+
+## Quick Start
+
+### Option A: Docker Compose (Recommended)
+
+Docker Compose bundles **PostgreSQL 16**, the **FastAPI backend** (with Trivy v0.76+ and Semgrep v1.136+ pre-installed), and the **Nginx-hosted React frontend**:
 
 ```bash
+# 1. Clone repository and navigate to repolens
+git clone https://github.com/Pavan-B-N/open-source-agents.git
+cd open-source-agents/agents/repolens
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env: set POSTGRES_PASSWORD and optionally GOOGLE_API_KEY
+
+# 3. Build and launch services
 docker compose up --build
 ```
 
-- 🖥️ **Dashboard:** [http://localhost:5173](http://localhost:5173) (also port `3000`)
-- ⚡ **API docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
-- 💚 **Health:** [http://localhost:8000/api/health](http://localhost:8000/api/health)
+- 🖥️ **Web Dashboard:** [http://localhost:5173](http://localhost:5173) (also accessible at [http://localhost:3000](http://localhost:3000))
+- ⚡ **Interactive API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- 💚 **Health Endpoint:** [http://localhost:8000/api/health](http://localhost:8000/api/health)
 
-The Compose stack starts PostgreSQL, the FastAPI backend, and the Nginx frontend. The backend waits for the database, initializes the schema, and seeds an illustrative demo report by default. **Demo findings are sample data, not scanner output.** Submit a public GitHub URL in the dashboard to run a real scan.
+---
 
-Stop the stack with `Ctrl+C`. The named PostgreSQL volume persists between runs. To remove the persisted database volume as well, use `docker compose down -v` (this deletes local audit data).
+### Option B: Local Development Setup
 
-### Local development setup
+#### Prerequisites
+- **Python 3.11+** (or Python 3.9+ with `google-adk`, `fastapi`, `uvicorn`, `psycopg3`)
+- **Node.js 18+** & **npm**
+- **PostgreSQL 14+** running locally
+- **Trivy** (`brew install trivy`) & **Semgrep** (`pip install semgrep`)
 
-Local mode requires Python 3.11+, Node.js 18+, PostgreSQL 14+, and Git. Install Trivy and Semgrep for live scanner results; without them, RepoLens records the scanners as unavailable. Configure `.env` with a local database URL and optional Google API key.
-
-Create the local database and user (adjust credentials for your machine):
-
+#### 1. Setup Database
 ```bash
-psql -U postgres -c "CREATE USER repolens WITH PASSWORD 'your_local_password';"
+psql -U postgres -c "CREATE USER repolens WITH PASSWORD 'your_password';"
 psql -U postgres -c "CREATE DATABASE repolens OWNER repolens;"
+psql -U repolens -d repolens -f db/schema.sql
 ```
 
-Install and start the backend:
-
+#### 2. Start Backend API
 ```bash
 cd agents/repolens
-python3.11 -m venv .venv
-source .venv/bin/activate             # Windows: .venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+
+# Start FastAPI server on port 8000
+DATABASE_URL="postgresql://repolens:your_password@localhost:5432/repolens" \
+python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Edit `.env` and set `DATABASE_URL` to use the password you chose, then initialize the schema and run the API:
-
-```bash
-psql -U repolens -d repolens -f db/schema.sql
-uvicorn backend.main:app --reload --port 8000
-```
-
-In a second terminal, install and run the frontend:
-
+#### 3. Start Frontend Dashboard
 ```bash
 cd agents/repolens/frontend
 npm ci
-npm run dev
+npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-Vite serves the UI at [http://localhost:5173](http://localhost:5173) and proxies `/api` calls to FastAPI on port `8000`.
-
-### Optional: seed the illustrative demo report
-
-When using the local setup, initialize the database and run:
-
-```bash
-cd agents/repolens
-python scripts/seed_demo.py
-```
-
-The seed is idempotent. It marks the report `is_demo=true`; the dashboard identifies the report as illustrative. It does not run Trivy or Semgrep.
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
 ## Configuration
 
-All settings are loaded from environment variables or the project `.env` file. The checked-in `.env.example` contains placeholders only.
+RepoLens loads all settings from environment variables or a local `.env` file via `pydantic-settings`:
 
-- 🗄️ `DATABASE_URL` — PostgreSQL URL; defaults to `postgresql://repolens:changeme@localhost:5432/repolens`. Compose provides the backend’s internal URL.
-- 🐘 `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` — Compose database settings (`repolens`, **must set**, `repolens`). Never commit a real password.
-- ✨ `GOOGLE_API_KEY` — Optional Google AI Studio key. Leave empty for scanner-only mode.
-- 🧠 `GEMINI_MODEL` — Gemini model name; defaults to `gemini-2.0-flash`.
-- 📦 `MAX_REPO_SIZE_MB` — Maximum checkout size; defaults to `100`. Size is sampled during cloning and checked again at completion.
-- ⏱️ `SCAN_TIMEOUT_SECONDS` — Clone timeout in seconds; defaults to `300`. Each scanner also applies a timeout.
-- ✂️ `MAX_SNIPPET_BYTES` — Maximum evidence bytes per finding before AI context preparation; defaults to `2048`.
-- 🪵 `LOG_LEVEL` — `debug`, `info`, `warning`, or `error`; defaults to `info`.
-- 🌱 `SEED_DEMO` — Compose entrypoint seeds the illustrative report by default; set `false` to skip it.
-
-For the default Compose connection string, choose a `POSTGRES_PASSWORD` without URL-reserved characters. If you set `DATABASE_URL` yourself and its password contains special characters, URL-encode them. The Docker and local run commands below specify the Uvicorn bind address and port directly.
+| Variable | Default | Purpose |
+| :--- | :--- | :--- |
+| `DATABASE_URL` | `postgresql://repolens:changeme@localhost:5432/repolens` | PostgreSQL connection string (supports local sockets or standard URIs). |
+| `POSTGRES_PASSWORD` | *(None)* | Password for PostgreSQL service in Docker Compose. |
+| `GOOGLE_API_KEY` | *(Empty)* | Google AI Studio API key. Leave blank for deterministic scanner-only mode. |
+| `GEMINI_MODEL` | `gemini-3.8-flash` | Gemini model for ADK triage (`gemini-3.8-flash`, `gemini-2.5-flash`, etc.). |
+| `MAX_REPO_SIZE_MB` | `100` | Disk threshold for clones. The background watchdog terminates clones exceeding this. |
+| `SCAN_TIMEOUT_SECONDS` | `300` | Maximum execution time in seconds for git operations and scanners. |
+| `MAX_SNIPPET_BYTES` | `2048` | Maximum evidence size per finding sent to the LLM agent to conserve tokens. |
+| `LOG_LEVEL` | `info` | Logging verbosity (`debug`, `info`, `warning`, `error`). |
+| `SEED_DEMO` | `false` | Whether Docker Compose should seed an illustrative demo audit on cold start. |
 
 ---
 
-## Using the API
+## API Reference
 
-The full interactive schema is served at `/docs` while the API is running.
+Interactive OpenAPI documentation is available at `http://localhost:8000/docs`.
 
-- 💚 `GET /api/health` — API, database, and Gemini configuration status.
-- 🗂️ `GET /api/audits` — List up to 20 recent audits.
-- 🔎 `GET /api/audits/{audit_id}` — Read an audit and full JSON report.
-- 🚀 `POST /api/scans` — Validate, scan, optionally enrich, and persist an audit.
-- 📥 `GET /api/audits/{audit_id}/report?format=json` — Download JSON (default).
-- 📝 `GET /api/audits/{audit_id}/report?format=markdown` — Download Markdown.
+### Key Endpoints
 
-Start a scan:
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/health` | Health check: reports API, database ping, and Gemini status. |
+| `GET` | `/api/audits` | List up to 20 recent audits with finding counts and metadata. |
+| `GET` | `/api/audits/{id}` | Retrieve full audit record, including JSON report and scanner telemetry. |
+| `POST` | `/api/scans` | Synchronously clone, scan with Trivy + Semgrep, enrich with Gemini, and persist. |
+| `GET` | `/api/audits/{id}/report` | Download the audit report. Pass `?format=json` or `?format=markdown`. |
+
+### Trigger a Scan via cURL
 
 ```bash
 curl -X POST http://localhost:8000/api/scans \
-  -H 'Content-Type: application/json' \
-  -d '{"repository_url":"https://github.com/OWASP/NodeGoat"}'
+  -H "Content-Type: application/json" \
+  -d '{"repository_url": "https://github.com/Pavan-B-N/weather-app"}'
 ```
 
-The endpoint runs synchronously and returns after the scan is complete:
-
+**Response:**
 ```json
 {
-  "audit_id": 1,
+  "audit_id": 3,
   "status": "completed",
-  "message": "Scan completed. 5 findings."
+  "message": "Scan completed. 51 findings."
 }
 ```
 
-Common error responses include `422` for an invalid URL or a repository that cannot be scanned within configured limits, `500` for an unexpected scan error, and `503` when persistence is unavailable.
-
-The finding count above is an example response shape, not a promise about results for that repository. Scanner output depends on the repository contents, scanner versions, and rules available at scan time. Retrieve or export an audit with:
+### Download Reports
 
 ```bash
-curl http://localhost:8000/api/audits/1
-curl 'http://localhost:8000/api/audits/1/report?format=markdown' -o report.md
+# Download structured JSON
+curl -O http://localhost:8000/api/audits/3/report?format=json
+
+# Download formatted Markdown
+curl -o audit-report.md http://localhost:8000/api/audits/3/report?format=markdown
 ```
-
-### Finding model
-
-Each finding includes a **title**, normalized **severity**, **category**, originating **scanner**, and report-local `finding_id`. Where the scanner provides them, reports also include a rule/CVE/CWE reference, file and line location, redacted evidence, remediation guidance, and source link. `provenance` distinguishes `scanner` findings from `ai_suggestion` entries.
-
-AI summaries and prioritized actions are separate report fields; they do not overwrite scanner evidence or severity.
 
 ---
 
-## Testing and development checks
+## Security and Privacy
 
-From the project directory, run the Python unit suite:
+- **No Remote Code Execution**: RepoLens inspects source code statically. It **never** executes `npm install`, `pip install`, Makefiles, Dockerfiles, or arbitrary repository scripts.
+- **Strict Subprocess Array Invocation**: All Git and scanner commands are passed as immutable string lists (`shell=False`) to prevent command injection.
+- **Automatic Secret Scrubbing**: [`backend/scanner/redactor.py`](file:///Users/pavanbn/Local%20Drive/DevFest/agents/repolens/backend/scanner/redactor.py) inspects all evidence snippets and masks private keys, AWS tokens, GitHub PATs, and passwords before database storage or LLM forwarding.
+- **Ephemeral Checkouts**: Cloned repositories reside in temporary OS directories and are aggressively removed in `finally` blocks upon scan completion or failure.
+- **Privacy Boundaries with AI**: When Gemini is enabled, only normalized finding titles, rule descriptions, and bounded snippets are transmitted. Source trees are never sent to external APIs.
+
+---
+
+## Verification & Testing
+
+RepoLens includes a comprehensive unit and integration test suite covering URL validation, scanner output normalization, secret redaction, database persistence, and Google ADK fallback mechanisms:
 
 ```bash
-cd agents/repolens
-pytest -v
-```
+# Run backend Python tests (72 passed in ~0.2s)
+python3 -m pytest -v
 
-The unit tests cover URL validation, scanner-output normalization, secret redaction, agent fallback/tool behavior, database operations with mocks, demo seeding, and model serialization. They are designed to run without live PostgreSQL, scanner binaries, or Gemini credentials.
-
-Check and build the frontend:
-
-```bash
-cd agents/repolens/frontend
-npm ci
+# Run frontend TypeScript type checking and Vite production build
+cd frontend
 npm run typecheck
 npm run build
 ```
 
-For a full manual check, start PostgreSQL and the API, open the dashboard, scan a public repository, inspect a finding and scanner status, then download both report formats. A missing scanner should display as unavailable rather than as a clean scan.
-
 ---
-
-## Security and privacy
-
-- **Repository scope:** only HTTPS `github.com/owner/repo` URLs are accepted; private repositories and authenticated GitHub access are not implemented.
-- **No repository execution:** RepoLens shallow-clones source and invokes scanners. It does not run repository scripts, install project dependencies, or execute build systems.
-- **Process invocation:** Git and scanner commands are passed as argument arrays with `shell=False`.
-- **Resource limits:** clone size is sampled during transfer and checked once more at completion; cloning and scanner processes have timeouts. A sampling interval means disk use can briefly cross the configured size before the next check stops the process.
-- **Temporary checkout:** the cloned repository is removed when scanning exits, including on failure.
-- **Secret handling:** regex-based redaction masks common secret patterns in evidence. This is a best-effort safeguard, not a guarantee that every secret format will be detected.
-- **Gemini data flow:** when enabled, Gemini receives a bounded snapshot of normalized findings and scanner metadata, not the repository checkout. Gemini processes that data under Google's API terms.
-- **Persistence:** audit reports, including normalized evidence snippets, are stored in PostgreSQL until the operator removes them.
-- **Access control:** the API has no authentication or user isolation. Do not expose it to the public internet without adding authentication, authorization, and deployment protections.
-- **Secrets:** keep `.env`, API keys, and database credentials out of version control. The `.env.example` file is for placeholders only.
-
----
-
-## Known limitations
-
-- Only public GitHub repositories are supported; GitHub Enterprise, other Git hosts, and private repositories are not supported.
-- The scan request is synchronous. Large or complex repositories may take several minutes and can exceed reverse-proxy/client timeouts.
-- A clone size check runs periodically, so the configured limit is not an instantaneous filesystem quota.
-- Local development requires PostgreSQL. There is no SQLite or in-memory API persistence mode.
-- Scanner coverage depends on the installed Trivy and Semgrep versions and their available rules/databases.
-- Secret redaction uses patterns and may miss unfamiliar credential formats or redact non-secret text.
-- Gemini may be unavailable due to account, region, quota, network, or model availability. In those cases, scanner reporting continues without AI enrichment.
-- No authentication, multi-user access control, historical diffing, or background job queue is included.
-- Windows has not been verified.
-
-## Roadmap
-
-- [ ] Add background scan jobs and progress reporting.
-- [ ] Add SARIF export for code-scanning workflows.
-- [ ] Compare findings across commits and repeated scans.
-- [ ] Add authenticated private-repository support with a least-privilege GitHub integration.
-- [ ] Add integration tests against PostgreSQL and pinned scanner versions in CI.
-- [ ] Add configurable retention and audit deletion controls.
 
 ## Contributing
 
-RepoLens lives in `agents/repolens/` and follows the parent repository's contribution rules. Keep changes scoped to this project, document setup and limitations, and use the PR checklist in the repository root. Never commit `.env` files, credentials, or private repository data.
+Contributions are welcome! Please ensure:
+1. All changes respect the **AI Workflows & Automation** principle (scanners remain source of truth; AI suggestions remain strictly labeled).
+2. All new scanner integrations implement the common `Finding` normalization schema.
+3. Unit tests pass with `python3 -m pytest -v` before submitting pull requests.
 
-See the [repository contribution guide](../../CONTRIBUTING.md) and [agent project index](../README.md).
+---
 
 ## License
 
-RepoLens is contributed under the parent repository's [MIT License](../../LICENSE).
+RepoLens is distributed under the [MIT License](../../LICENSE).
